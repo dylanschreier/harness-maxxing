@@ -1,0 +1,51 @@
+# Fork checks: web/dist matches web/src, and changes to what is sent to the authors are flagged.
+name: Verify web/dist
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - name: web/dist matches the sources
+        run: test -z "$(git status --porcelain web/dist)" || { git status --porcelain web/dist; exit 1; }
+
+  # Fork: flags any change to the code that sends data to the authors (telemetry, feedback, license),
+  # or any new call to their servers, so it is reviewed before it reaches the VPS.
+  author-calls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Changes to what is sent to harness-maxxing.com
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git cat-file -e "$BASE^{commit}" 2>/dev/null || { echo "no base to compare"; exit 0; }
+          files="server/maxxing/register.py server/maxxing/feedback.py server/maxxing/license.py server/maxxing/cmd_license.py server/maxxing/api/settings.py"
+          changed=$(git diff --name-only "$BASE" HEAD -- $files)
+          new_calls=$(git diff -U0 "$BASE" HEAD -- server web/src install.sh | grep -E '^\+[^+].*harness-maxxing\.com' | grep -v '/i18n/' || true)
+          if [ -n "$changed$new_calls" ]; then
+            echo "::error::Code that talks to the authors changed: review it before deploying"
+            [ -n "$changed" ] && git diff "$BASE" HEAD -- $changed
+            [ -n "$new_calls" ] && echo "$new_calls"
+            exit 1
+          fi
