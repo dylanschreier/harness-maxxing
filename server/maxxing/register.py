@@ -36,8 +36,7 @@ TOKEN = "register_token"          # secrets.json
 TOKEN_MAX = 256                   # a token the cloud hands out: printable ASCII, at most this long
 _sync_lock = threading.RLock()     # one save / sync / heartbeat at a time: two at once made two rows
 EVERY = 24 * 3600
-DEFAULTS = {"count": False,  # fork: anonymous counter off by default
-            "email": "", "news": False, "asked": False}
+DEFAULTS = {"count": True, "email": "", "news": False, "asked": False}
 MIGRATED = "register_migrated_a94"   # config.json: the one-time "counter on unless the user was asked" is done
 OS_RELEASE = Path("/etc/os-release")
 OPT_OUT_ENV = ("MAXXING_NO_TELEMETRY", "DO_NOT_TRACK")
@@ -50,7 +49,10 @@ def migrate(raw: dict) -> bool:
     whose user never saw the choice. One who saw it (asked) keeps what they chose. Edits `raw`; True when changed."""
     if raw.get(MIGRATED):
         return False
-    raw[MIGRATED] = True                                    # fork: never turns the counter on by itself
+    reg = raw.get("register") if isinstance(raw.get("register"), dict) else {}
+    if not reg.get("asked"):
+        raw["register"] = {**reg, "count": True}
+    raw[MIGRATED] = True
     return True
 
 
