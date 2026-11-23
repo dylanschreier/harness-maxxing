@@ -91,8 +91,8 @@ def test_anonymous_counter_sends_the_version_the_system_and_health_codes_only(cl
     assert path == "/v1/heartbeat" and set(body) == {"token", "version", "os", "arch", "health"}
 
 
-def test_counter_is_on_by_default(mx):
-    assert register.settings()["count"] is True and register.counting()
+def test_counter_is_off_by_default(mx):
+    assert register.settings()["count"] is False and not register.counting()
 
 
 def test_os_name_and_health_codes_are_short(mx, tmp_path, monkeypatch):
@@ -125,12 +125,12 @@ def test_environment_opt_out_wins_over_the_setting(cloud, monkeypatch, env):
     assert not register.blocked()
 
 
-def test_migration_turns_the_counter_on_only_for_installs_never_asked():
+def test_migration_never_turns_the_counter_on():
     raw: dict = {}
-    assert register.migrate(raw) and raw["register"]["count"] is True and raw[register.MIGRATED]
+    assert register.migrate(raw) and "register" not in raw and raw[register.MIGRATED]
     raw = {"register": {"count": False, "email": "a@b.co", "asked": False}}
     register.migrate(raw)
-    assert raw["register"] == {"count": True, "email": "a@b.co", "asked": False}
+    assert raw["register"] == {"count": False, "email": "a@b.co", "asked": False}
     raw = {"register": {"count": False, "email": "", "asked": True}}      # saw the choice and left it off
     register.migrate(raw)
     assert raw["register"]["count"] is False
@@ -150,7 +150,7 @@ def test_init_runs_the_migration_once(mx, monkeypatch):
                            language=None, system_clock=None, claude_dir=None, secret_from_stdin=None, no_crons=True)
     config.update_config(register={"count": False, "asked": False})
     cmd_core.do_init(a)
-    assert register.settings()["count"] is True
+    assert register.settings()["count"] is False
     register.save(count=False, asked=True)
     cmd_core.do_init(a)                             # the next update keeps the user's choice
     assert register.settings()["count"] is False
